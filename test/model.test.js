@@ -3567,7 +3567,7 @@ module.exports = {
       var query = BlogPost.findOne({title: 'interoperable findOne as promise'});
       query.exec(function (err, found) {
         should.strictEqual(err, null);
-        found._id.should.eql(created._id);
+        found.id.should.eql(created.id);
         db.close();
       });
     });
@@ -3586,8 +3586,8 @@ module.exports = {
       query.exec(function (err, found) {
         should.strictEqual(err, null);
         found.length.should.equal(2);
-        found[0]._id.should.eql(createdOne._id);
-        found[1]._id.should.eql(createdTwo._id);
+        found[0]._id.id.should.eql(createdOne._id.id);
+        found[1]._id.id.should.eql(createdTwo._id.id);
         db.close();
       });
     });
@@ -3621,6 +3621,7 @@ module.exports = {
       var query = BlogPost.count({title: 'interoperable ad-hoc as promise'});
       query.exec('findOne', function (err, found) {
         should.strictEqual(err, null);
+        found.id;
         found._id.should.eql(created._id);
         db.close();
       });
@@ -3672,7 +3673,7 @@ module.exports = {
       var promise = query.exec();
       promise.addBack(function (err, found) {
         should.strictEqual(err, null);
-        found._id.should.eql(created._id);
+        found.id.should.eql(created.id);
         db.close();
       });
     });
@@ -3692,6 +3693,8 @@ module.exports = {
       promise.addBack(function (err, found) {
         should.strictEqual(err, null);
         found.length.should.equal(2);
+        found[0].id;
+        found[1].id;
         found[0]._id.should.eql(createdOne._id);
         found[1]._id.should.eql(createdTwo._id);
         db.close();
@@ -3729,7 +3732,7 @@ module.exports = {
       var promise = query.exec('findOne');
       promise.addBack(function (err, found) {
         should.strictEqual(err, null);
-        found._id.should.eql(created._id);
+        found._id.id.should.eql(created._id.id);
         db.close();
       });
     });
@@ -4814,34 +4817,42 @@ module.exports = {
     var strict = new Schema({
         ts  : { type: Date, default: Date.now }
       , content: String
-    }, {lax: false});
+    }, { strict: true });
 
     var Lax = db.model('Lax', lax);
     var Strict = db.model('Strict', strict);
 
-    var l = new Lax({content: 'sample', rouge: 'data'}).toObject();
+    var l = new Lax({content: 'sample', rouge: 'data'});
+    l._strictMode.should.be.false;
+    l = l.toObject();
     l.content.should.equal('sample')
     l.rouge.should.equal('data');
     should.exist(l.rouge);
 
-    var s = new Strict({content: 'sample', rouge: 'data'}).toObject();
+    var s = new Strict({content: 'sample', rouge: 'data'});
+    s._strictMode.should.be.true;
+    s = s.toObject();
     s.should.have.property('ts');
     s.content.should.equal('sample');
     s.should.not.have.property('rouge');
     should.not.exist(s.rouge);
 
     // instance override
-    var instance = new Lax({content: 'sample', rouge: 'data'}, false).toObject();
+    var instance = new Lax({content: 'sample', rouge: 'data'}, true);
+    instance._strictMode.should.be.true;
+    instance = instance.toObject();
     instance.content.should.equal('sample')
     should.not.exist(instance.rouge);
-
+    instance.should.have.property('ts')
 
     // hydrate works as normal, but supports the schema level flag.
-    var s2 = new Strict({content: 'sample', rouge: 'data'}, true).toObject();
-    s2.should.not.have.property('ts')
+    var s2 = new Strict({content: 'sample', rouge: 'data'}, false);
+    s2._strictMode.should.be.false;
+    s2 = s2.toObject();
+    s2.should.have.property('ts')
     s2.content.should.equal('sample');
-    s2.should.not.have.property('rouge');
-    should.not.exist(s2.rouge);
+    s2.should.have.property('rouge');
+    should.exist(s2.rouge);
 
     // testing init
     var s3 = new Strict();
