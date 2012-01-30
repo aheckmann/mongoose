@@ -8,7 +8,9 @@ var start = require('./common')
   , mongoose = require('./common').mongoose
   , Schema = mongoose.Schema
   , random = require('../lib/utils').random
-  , MongooseArray = mongoose.Types.Array;
+  , MongooseArray = mongoose.Types.Array
+  , DocumentObjectId = mongoose.Types.ObjectId
+  , collection = 'asdf'+random()
 
 var User = new Schema({
     name: String
@@ -691,5 +693,376 @@ module.exports = {
         });
       });
     });
+  },
+
+  'having both a pull and pullAll should default to pullAll': function () {
+    var db = start()
+      , schema = new Schema({
+          nested: {
+            nums: [Number]
+          }
+        });
+
+    mongoose.model('NestedPushes', schema);
+    var Temp = db.model('NestedPushes', 'n'+random());
+
+    Temp.create({nested: {nums: [1, 2, 3, 4, 5]}}, function (err, t) {
+      t.nested.nums.$pull(1);
+      t.nested.nums.$pullAll([2, 3]);
+
+      t.nested.nums.should.have.length(2);
+
+      t.save( function (err) {
+        should.strictEqual(null, err);
+        t.nested.nums.should.have.length(2);
+        Temp.findById(t._id, function (err, found) {
+          found.nested.nums.should.have.length(2);
+          db.close();
+        });
+      });
+    });
+  },
+
+  'test filtering an embedded array by the id shortcut function': function () {
+    var db = start()
+      , BlogPost = db.model('BlogPost', collection);
+
+    var post = new BlogPost();
+
+    post.comments.push({ title: 'woot' });
+    post.comments.push({ title: 'aaaa' });
+
+    var subdoc1 = post.comments[0];
+    var subdoc2 = post.comments[1];
+
+    post.save(function (err) {
+      should.strictEqual(err, null);
+
+      BlogPost.findById(post.get('_id'), function (err, doc) {
+        db.close();
+        should.strictEqual(err, null);
+
+        // test with an objectid
+        doc.comments.id(subdoc1.get('_id')).title.should.eql('woot');
+
+        // test with a string
+        var id = DocumentObjectId.toString(subdoc2._id);
+        doc.comments.id(id).title.should.eql('aaaa');
+
+      });
+    });
+  },
+
+  'test filtering an embedded array by the id with cast error': function () {
+    var db = start()
+      , BlogPost = db.model('BlogPost', collection);
+
+    var post = new BlogPost();
+
+    post.save(function (err) {
+      should.strictEqual(err, null);
+
+      BlogPost.findById(post.get('_id'), function (err, doc) {
+        db.close();
+        should.strictEqual(err, null);
+        should.strictEqual(doc.comments.id(null), null);
+
+      });
+    });
+  },
+
+  'test filtering an embedded array by the id shortcut with no match': function () {
+    var db = start()
+      , BlogPost = db.model('BlogPost', collection);
+
+    var post = new BlogPost();
+
+    post.save(function (err) {
+      should.strictEqual(err, null);
+
+      BlogPost.findById(post.get('_id'), function (err, doc) {
+        db.close();
+        should.strictEqual(err, null);
+        should.strictEqual(doc.comments.id(new DocumentObjectId), null);
+
+      });
+    });
+  },
+
+  'test for removing a subdocument atomically': function () {
+    var db = start()
+      , BlogPost = db.model('BlogPost', collection);
+
+    var post = new BlogPost();
+    post.title = 'hahaha';
+    post.comments.push({ title: 'woot' });
+    post.comments.push({ title: 'aaaa' });
+
+    post.save(function (err) {
+      should.strictEqual(err, null);
+
+      BlogPost.findById(post.get('_id'), function (err, doc) {
+        should.strictEqual(err, null);
+
+        doc.comments[0].remove();
+        doc.save(function (err) {
+          should.strictEqual(err, null);
+
+          BlogPost.findById(post.get('_id'), function (err, doc) {
+            db.close();
+            should.strictEqual(err, null);
+
+            doc.comments.should.have.length(1);
+            doc.comments[0].title.should.eql('aaaa');
+          });
+        });
+      });
+    });
+  },
+
+  'test for single pull embedded doc' : function()  {
+    var db = start()
+    , BlogPost = db.model('BlogPost', collection);
+
+    var post = new BlogPost();
+    post.title = 'hahaha';
+    post.comments.push({ title: 'woot' });
+    post.comments.push({ title: 'aaaa' });
+
+    post.save(function (err) {
+      should.strictEqual(err, null);
+
+      BlogPost.findById(post.get('_id'), function (err, doc) {
+        should.strictEqual(err, null);
+
+        doc.comments.pull(doc.comments[0]);
+        doc.comments.pull(doc.comments[0]);
+        doc.save(function (err) {
+          should.strictEqual(err, null);
+
+          BlogPost.findById(post.get('_id'), function (err, doc) {
+            db.close();
+            should.strictEqual(err, null);
+            doc.comments.should.have.length(0);
+          });
+        });
+      });
+    });
+  },
+
+  'test updating multiple Number $pushes as a single $pushAll': function () {
+    var db = start()
+      , schema = new Schema({
+          nested: {
+            nums: [Number]
+          }
+        });
+
+    mongoose.model('NestedPushes', schema);
+    var Temp = db.model('NestedPushes', collection);
+
+    Temp.create({}, function (err, t) {
+      t.nested.nums.push(1);
+      t.nested.nums.push(2);
+
+      t.nested.nums.should.have.length(2);
+
+      t.save( function (err) {
+        should.strictEqual(null, err);
+        t.nested.nums.should.have.length(2);
+        Temp.findById(t._id, function (err, found) {
+          found.nested.nums.should.have.length(2);
+          db.close();
+        });
+      });
+    });
+  },
+
+  'test updating at least a single $push and $pushAll as a single $pushAll': function () {
+    var db = start()
+      , schema = new Schema({
+          nested: {
+            nums: [Number]
+          }
+        });
+
+    mongoose.model('NestedPushes', schema);
+    var Temp = db.model('NestedPushes', collection);
+
+    Temp.create({}, function (err, t) {
+      t.nested.nums.push(1);
+      t.nested.nums.$pushAll([2, 3]);
+
+      t.nested.nums.should.have.length(3);
+
+      t.save( function (err) {
+        should.strictEqual(null, err);
+        t.nested.nums.should.have.length(3);
+        Temp.findById(t._id, function (err, found) {
+          found.nested.nums.should.have.length(3);
+          db.close();
+        });
+      });
+    });
+  },
+
+  '$pull should affect what you see in an array before a save': function () {
+    var db = start()
+      , schema = new Schema({
+          nested: {
+            nums: [Number]
+          }
+        });
+
+    mongoose.model('NestedPushes', schema);
+    var Temp = db.model('NestedPushes', collection);
+
+    Temp.create({nested: {nums: [1, 2, 3, 4, 5]}}, function (err, t) {
+      t.nested.nums.$pull(1);
+
+      t.nested.nums.should.have.length(4);
+
+      db.close();
+    });
+  },
+
+  '$pullAll should affect what you see in an array before a save': function () {
+    var db = start()
+      , schema = new Schema({
+          nested: {
+            nums: [Number]
+          }
+        });
+
+    mongoose.model('NestedPushes', schema);
+    var Temp = db.model('NestedPushes', collection);
+
+    Temp.create({nested: {nums: [1, 2, 3, 4, 5]}}, function (err, t) {
+      t.nested.nums.$pullAll([1, 2, 3]);
+
+      t.nested.nums.should.have.length(2);
+
+      db.close();
+    });
+  },
+
+  'test updating multiple Number $pulls as a single $pullAll': function () {
+    var db = start()
+      , schema = new Schema({
+          nested: {
+            nums: [Number]
+          }
+        });
+
+    mongoose.model('NestedPushes', schema);
+    var Temp = db.model('NestedPushes', collection);
+
+    Temp.create({nested: {nums: [1, 2, 3, 4, 5]}}, function (err, t) {
+      t.nested.nums.$pull(1);
+      t.nested.nums.$pull(2);
+
+      t.nested.nums.should.have.length(3);
+
+      t.save( function (err) {
+        should.strictEqual(null, err);
+        t.nested.nums.should.have.length(3);
+        Temp.findById(t._id, function (err, found) {
+          found.nested.nums.should.have.length(3);
+          db.close();
+        });
+      });
+    });
+  },
+
+  'test $push casting': function () {
+    var db = start()
+      , BlogPost = db.model('BlogPost', collection)
+      , post = new BlogPost();
+
+    post.get('numbers').push('3');
+    post.get('numbers')[0].should.equal(3);
+    db.close();
+  },
+
+  'test $pull casting': function () {
+    var db = start()
+      , BlogPost = db.model('BlogPost', collection)
+      , post = new BlogPost();
+
+    post.get('numbers').push(1, 2, 3, 4);
+    post.save( function (err) {
+      BlogPost.findById( post.get('_id'), function (err, found) {
+        found.get('numbers').length.should.equal(4);
+        found.get('numbers').$pull('3');
+        found.save( function (err) {
+          BlogPost.findById( found.get('_id'), function (err, found2) {
+            found2.get('numbers').length.should.equal(3);
+            db.close();
+          });
+        });
+      });
+    });
+  },
+
+  'test that we instantiate Numbers in arrays': function () {
+    var db = start()
+      , BlogPost = db.model('BlogPost', collection);
+
+    var post = new BlogPost();
+    post.numbers.push(1, '2', 3);
+
+    post.save(function (err) {
+      should.strictEqual(err, null);
+
+      BlogPost.findById(post._id, function (err, doc) {
+        should.strictEqual(err, null);
+
+        (~doc.numbers.indexOf(1)).should.not.eql(0);
+        (~doc.numbers.indexOf(2)).should.not.eql(0);
+        (~doc.numbers.indexOf(3)).should.not.eql(0);
+
+        db.close();
+      });
+    });
+  },
+
+  'test removing from an array atomically using MongooseArray#remove': function () {
+    var db = start()
+      , BlogPost = db.model('BlogPost', collection);
+
+    var post = new BlogPost();
+    post.numbers.push(1, 2, 3);
+
+    post.save(function (err) {
+      should.strictEqual(err, null);
+
+      BlogPost.findById(post._id, function (err, doc) {
+        should.strictEqual(err, null);
+
+        doc.numbers.remove('1');
+        doc.save(function (err) {
+          should.strictEqual(err, null);
+
+          BlogPost.findById(post.get('_id'), function (err, doc) {
+            should.strictEqual(err, null);
+
+            doc.numbers.should.have.length(2);
+            doc.numbers.remove('2', '3');
+
+            doc.save(function (err) {
+              should.strictEqual(err, null);
+
+              BlogPost.findById(post._id, function (err, doc) {
+                db.close();
+                should.strictEqual(err, null);
+
+                doc.numbers.should.have.length(0);
+              });
+            });
+          });
+        });
+      });
+    });
   }
+
 };
