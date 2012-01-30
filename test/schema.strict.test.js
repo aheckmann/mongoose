@@ -20,11 +20,11 @@ var start = require('./common')
   , MongooseArray = mongoose.Types.Array
   , MongooseError = mongoose.Error;
 
-model.exports = {
+module.exports = {
 
   'should not persist non-schema props': function () {
     var db = start()
-      , B = db.model('BlogPost', new Schema({ title: String })
+      , B = db.model('SchemaBP', new Schema({ title: String }))
 
     var b = new B;
     b.whateveriwant = 10;
